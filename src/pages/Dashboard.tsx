@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useStore } from '../store'
-import { Users, Award, FileText, AlertTriangle, Upload, Settings, Play, FileSpreadsheet, Check } from 'lucide-react'
+import { Users, Award, FileText, AlertTriangle, Upload, Settings, Play, FileSpreadsheet, Check, Download } from 'lucide-react'
 import { formatRank } from '../types'
 
 const steps = [
@@ -49,7 +49,15 @@ export default function Dashboard() {
 
       {/* Quick Start Guide */}
       <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
-        <p className="text-gray-400 text-xs font-medium uppercase tracking-wider mb-5">快速上手</p>
+        <p className="text-gray-400 text-xs font-medium uppercase tracking-wider mb-3">快速上手</p>
+        <a
+          href={`${import.meta.env.BASE_URL}奖学金评选模板.xlsx`}
+          download
+          className="inline-flex items-center gap-2 px-4 py-2.5 mb-5 text-sm font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"
+        >
+          <Download className="w-4 h-4" />
+          下载奖学金评选模板
+        </a>
         <div className="flex items-start justify-between">
           {steps.map((step, i) => {
             const done = stepStatus[i]
