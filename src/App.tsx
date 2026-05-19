@@ -8,7 +8,7 @@ import EvaluationResults from './pages/EvaluationResults'
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename="/scholarship-system">
       <AppProvider>
         <Routes>
           <Route element={<Layout />}>
