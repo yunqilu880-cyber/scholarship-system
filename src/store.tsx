@@ -21,6 +21,7 @@ interface AppState {
   deleteExclusion: (id: string) => void
   runEvaluation: () => void
   setResults: (r: EvaluationResult[]) => void
+  resetAll: () => void
 }
 
 const AppContext = createContext<AppState | null>(null)
@@ -42,70 +43,150 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const addExclusion = useCallback((e: ExclusionRule) => setExclusions(prev => [...prev, e]), [])
   const deleteExclusion = useCallback((id: string) => setExclusions(prev => prev.filter(x => x.id !== id)), [])
 
+  const resetAll = useCallback(() => {
+    setStudents([])
+    setScholarships([])
+    setExclusions([])
+    setResults([])
+  }, [])
+
   const runEvaluation = useCallback(() => {
     const activeScholarships = scholarships.filter(s => s.active)
     const allResults: EvaluationResult[] = []
 
+    // Group students by major and compute per-major ranking percentages
+    const majorGroups = new Map<string, Student[]>()
+    for (const stu of students) {
+      const key = stu.major || '未分类'
+      if (!majorGroups.has(key)) majorGroups.set(key, [])
+      majorGroups.get(key)!.push(stu)
+    }
+
+    const majorPercentMap = new Map<string, { basicPercent: number; comprehensivePercent: number; professionalPercent: number }>()
+    for (const [, group] of majorGroups) {
+      const total = group.length
+
+      const byBasic = [...group].sort((a, b) => b.basicTotal - a.basicTotal)
+      for (let i = 0; i < byBasic.length; i++) {
+        const entry = majorPercentMap.get(byBasic[i].id) || { basicPercent: 0, comprehensivePercent: 0, professionalPercent: 0 }
+        entry.basicPercent = ((i + 1) / total) * 100
+        majorPercentMap.set(byBasic[i].id, entry)
+      }
+
+      const byComp = [...group].sort((a, b) => b.comprehensiveTotal - a.comprehensiveTotal)
+      for (let i = 0; i < byComp.length; i++) {
+        const entry = majorPercentMap.get(byComp[i].id)!
+        entry.comprehensivePercent = ((i + 1) / total) * 100
+      }
+
+      const byProfessional = [...group].sort((a, b) => b.professionalScore - a.professionalScore)
+      for (let i = 0; i < byProfessional.length; i++) {
+        const entry = majorPercentMap.get(byProfessional[i].id)!
+        entry.professionalPercent = ((i + 1) / total) * 100
+      }
+    }
+
     for (const scholarship of activeScholarships) {
       const c = scholarship.conditions
-      const eligibleStudents = students.filter(stu => {
+
+      const evaluated = students.map(stu => {
+        const p = majorPercentMap.get(stu.id) || { basicPercent: 100, comprehensivePercent: 100, professionalPercent: 100 }
+        const basicPercent = p.basicPercent
+        const comprehensivePercent = p.comprehensivePercent
+        const professionalPercent = p.professionalPercent
         const reasons: string[] = []
-        if (stu.gpa < c.minGpa) reasons.push(`GPA(${stu.gpa})不满足最低要求(${c.minGpa})`)
-        if (stu.failedCourses > c.maxFailedCourses) reasons.push(`挂科${stu.failedCourses}门，超过上限(${c.maxFailedCourses})`)
-        if (stu.volunteerHours < c.minVolunteerHours) reasons.push(`志愿时长(${stu.volunteerHours}h)不足(${c.minVolunteerHours}h)`)
-        if (stu.totalScore < c.minTotalScore) reasons.push(`综合得分(${stu.totalScore})不满足要求(${c.minTotalScore})`)
-        if (stu.sportsScore < c.minSportsScore) reasons.push(`体测(${stu.sportsScore})不达标(${c.minSportsScore})`)
-        if (stu.hasPunishment) reasons.push('存在违纪处分记录')
-        return reasons.length === 0
-      }).sort((a, b) => b.totalScore - a.totalScore)
 
-      const topStudents = eligibleStudents.slice(0, scholarship.quota * 2)
+        if (c.minProfessionalScore > 0 && stu.professionalScore < c.minProfessionalScore) {
+          reasons.push(`加权平均分${stu.professionalScore} < ${c.minProfessionalScore}`)
+        }
+        if (c.maxBasicRankPercent < 100 && basicPercent > c.maxBasicRankPercent) {
+          reasons.push(`基本项排名${basicPercent.toFixed(1)}% > ${c.maxBasicRankPercent}%`)
+        }
+        if (c.maxComprehensiveRankPercent < 100 && comprehensivePercent > c.maxComprehensiveRankPercent) {
+          reasons.push(`综合能力排名${comprehensivePercent.toFixed(1)}% > ${c.maxComprehensiveRankPercent}%`)
+        }
+        if (c.maxProfessionalRankPercent < 100 && professionalPercent > c.maxProfessionalRankPercent) {
+          reasons.push(`专业素质排名${professionalPercent.toFixed(1)}% > ${c.maxProfessionalRankPercent}%`)
+        }
+        if (c.minForeignScore > 0 && stu.foreignScore < c.minForeignScore) {
+          reasons.push(`外语成绩${stu.foreignScore} < ${c.minForeignScore}`)
+        }
+        if (c.minSportsScore > 0 && stu.sportsScore < c.minSportsScore) {
+          reasons.push(`体育成绩${stu.sportsScore} < ${c.minSportsScore}`)
+        }
+        return { stu, basicPercent, comprehensivePercent, eligible: reasons.length === 0, reasons }
+      })
 
-      topStudents.forEach((stu, idx) => {
-        const rejectionReasons: string[] = []
-        if (stu.gpa < c.minGpa) rejectionReasons.push(`GPA ${stu.gpa} < ${c.minGpa}`)
-        if (stu.failedCourses > c.maxFailedCourses) rejectionReasons.push(`挂科${stu.failedCourses}门`)
-        if (stu.volunteerHours < c.minVolunteerHours) rejectionReasons.push(`志愿时长不足`)
-        if (stu.totalScore < c.minTotalScore) rejectionReasons.push(`综合得分不足`)
-        if (stu.sportsScore < c.minSportsScore) rejectionReasons.push(`体测不达标`)
-        if (stu.hasPunishment) rejectionReasons.push('违纪处分')
+      // Non-qualifying students go straight to results
+      for (const item of evaluated.filter(e => !e.eligible)) {
+        allResults.push({
+          studentId: item.stu.id, studentName: item.stu.name, className: item.stu.className, major: item.stu.major,
+          scholarshipId: scholarship.id, scholarshipName: scholarship.name,
+          basicTotal: item.stu.basicTotal, basicMajorRank: item.stu.basicMajorRank, basicPercent: item.basicPercent,
+          comprehensiveTotal: item.stu.comprehensiveTotal, comprehensiveMajorRank: item.stu.comprehensiveMajorRank, comprehensivePercent: item.comprehensivePercent,
+          eligible: false,
+          rejectionReasons: item.reasons,
+          exclusionConflicts: [],
+        })
+      }
 
-        const conflicts: string[] = []
-        for (const rule of exclusions) {
-          if (rule.academicYear !== scholarship.academicYear) continue
-          if (rule.scholarshipA === scholarship.id || rule.scholarshipB === scholarship.id) {
-            const otherId = rule.scholarshipA === scholarship.id ? rule.scholarshipB : rule.scholarshipA
-            const otherScholarship = scholarships.find(s => s.id === otherId)
-            const alreadyWon = allResults.some(r => r.scholarshipId === otherId && r.studentId === stu.id && r.eligible)
-            if (alreadyWon && otherScholarship) {
-              conflicts.push(`与${otherScholarship.name}互斥`)
+      // Group qualifying students by major, sort within each group, award per-major
+      const passing = evaluated.filter(e => e.eligible)
+      const groups = new Map<string, typeof passing>()
+      for (const item of passing) {
+        const m = item.stu.major
+        if (!groups.has(m)) groups.set(m, [])
+        groups.get(m)!.push(item)
+      }
+
+      for (const [major, group] of groups) {
+        const quota = scholarship.majorQuotas[major] || Object.values(scholarship.majorQuotas).reduce((a, b) => a + b, 0)
+
+        group.sort((a, b) => {
+          if (scholarship.level === '学习优秀奖') return b.stu.professionalScore - a.stu.professionalScore
+          return b.stu.comprehensiveTotal - a.stu.comprehensiveTotal
+        })
+
+        let awarded = 0
+        for (let i = 0; i < group.length; i++) {
+          const item = group[i]
+          const stu = item.stu
+          const quotaReached = awarded >= quota
+
+          const conflicts: string[] = []
+          if (!quotaReached) {
+            for (const rule of exclusions) {
+              if (rule.academicYear !== scholarship.academicYear) continue
+              if (rule.scholarshipA === scholarship.id || rule.scholarshipB === scholarship.id) {
+                const otherId = rule.scholarshipA === scholarship.id ? rule.scholarshipB : rule.scholarshipA
+                const otherScholarship = activeScholarships.find(s => s.id === otherId)
+                const alreadyWon = allResults.some(r => r.scholarshipId === otherId && r.studentId === stu.id && r.eligible)
+                if (alreadyWon && otherScholarship) {
+                  conflicts.push(`与${otherScholarship.name}互斥`)
+                }
+              }
             }
           }
+
+          const ok = !quotaReached && conflicts.length === 0
+          if (ok) awarded++
+
+          const reasonList: string[] = []
+          if (quotaReached) reasonList.push('名额已满')
+          else if (conflicts.length > 0) reasonList.push(...conflicts)
+          else reasonList.push(...item.reasons)
+
+          allResults.push({
+            studentId: stu.id, studentName: stu.name, className: stu.className, major: stu.major,
+            scholarshipId: scholarship.id, scholarshipName: scholarship.name,
+            basicTotal: stu.basicTotal, basicMajorRank: stu.basicMajorRank, basicPercent: item.basicPercent,
+            comprehensiveTotal: stu.comprehensiveTotal, comprehensiveMajorRank: stu.comprehensiveMajorRank, comprehensivePercent: item.comprehensivePercent,
+            eligible: ok,
+            rejectionReasons: reasonList,
+            exclusionConflicts: conflicts,
+          })
         }
-
-        const eligible = rejectionReasons.length === 0 && conflicts.length === 0
-
-        allResults.push({
-          studentId: stu.id,
-          studentName: stu.name,
-          department: stu.department,
-          scholarshipId: scholarship.id,
-          scholarshipName: scholarship.name,
-          gpa: stu.gpa,
-          totalScore: stu.totalScore,
-          rank: eligible ? idx + 1 : -1,
-          eligible,
-          rejectionReasons,
-          exclusionConflicts: conflicts,
-          details: {
-            academicScore: stu.gpa * 25,
-            moralScore: stu.moralScore,
-            practiceScore: stu.practiceScore,
-            sportsScore: stu.sportsScore,
-            extraScore: stu.extraScore,
-          },
-        })
-      })
+      }
     }
 
     setResults(allResults)
@@ -117,7 +198,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setStudents, addStudent, updateStudent, deleteStudent,
       setScholarships, addScholarship, updateScholarship, deleteScholarship,
       setExclusions, addExclusion, deleteExclusion,
-      runEvaluation, setResults,
+      runEvaluation, setResults, resetAll,
     }}>
       {children}
     </AppContext.Provider>

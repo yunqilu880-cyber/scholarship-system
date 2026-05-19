@@ -1,37 +1,91 @@
+export interface Rank {
+  rank: number
+  total: number
+}
+
+export function formatRank(r: Rank): string {
+  return `${r.rank}/${r.total}`
+}
+
+export function parseRank(s: string): Rank {
+  const parts = s.split('/')
+  return { rank: parseInt(parts[0]) || 0, total: parseInt(parts[1]) || 0 }
+}
+
 export interface Student {
   id: string
   name: string
   studentId: string
-  department: string
-  major: string
   grade: string
-  gpa: number
+  college: string
+  major: string
+  className: string
+
+  // 基本测评分数
+  peerReviewScore: number
+  recordScore: number
   moralScore: number
-  practiceScore: number
+  moralMajorRank: Rank
+  moralClassRank: Rank
+  professionalScore: number
+  professionalMajorRank: Rank
+  professionalClassRank: Rank
+  basicTotal: number
+  basicMajorRank: Rank
+  basicClassRank: Rank
+
+  // 综合能力
+  comprehensiveBaseScore: number
+  comprehensiveBaseMajorRank: Rank
+  comprehensiveBaseClassRank: Rank
+  researchInnovation: number
+  researchMajorRank: Rank
+  researchClassRank: Rank
+  professionalSkill: number
+  skillMajorRank: Rank
+  skillClassRank: Rank
+  organizationWork: number
+  orgMajorRank: Rank
+  orgClassRank: Rank
+  sportsAesthetics: number
+  sportsAesMajorRank: Rank
+  sportsAesClassRank: Rank
+  laborEducation: number
+  laborMajorRank: Rank
+  laborClassRank: Rank
+  comprehensiveTotal: number
+  comprehensiveMajorRank: Rank
+  comprehensiveClassRank: Rank
+
+  // 体育
   sportsScore: number
-  extraScore: number
-  totalScore: number
-  failedCourses: number
-  hasPunishment: boolean
-  volunteerHours: number
-  awards: string[]
-  materials: string[]
+  sportsMajorRank: Rank
+  sportsClassRank: Rank
+
+  // 外语
+  foreignScore: number
+  foreignMajorRank: Rank
+  foreignClassRank: Rank
+}
+
+export interface ScholarshipConditions {
+  minProfessionalScore: number
+  maxBasicRankPercent: number
+  maxComprehensiveRankPercent: number
+  maxProfessionalRankPercent: number
+  minForeignScore: number
+  minSportsScore: number
 }
 
 export interface Scholarship {
   id: string
   name: string
-  level: '国家级' | '校级' | '院级'
+  level: '综合一等奖' | '综合二等奖' | '综合三等奖' | '学习优秀奖' | '综合能力突出奖'
   amount: number
   quota: number
+  majorQuotas: Record<string, number>
   academicYear: string
-  conditions: {
-    minGpa: number
-    maxFailedCourses: number
-    minVolunteerHours: number
-    minTotalScore: number
-    minSportsScore: number
-  }
+  conditions: ScholarshipConditions
   active: boolean
 }
 
@@ -46,20 +100,17 @@ export interface ExclusionRule {
 export interface EvaluationResult {
   studentId: string
   studentName: string
-  department: string
+  className: string
+  major: string
   scholarshipId: string
   scholarshipName: string
-  gpa: number
-  totalScore: number
-  rank: number
+  basicTotal: number
+  basicMajorRank: Rank
+  basicPercent: number
+  comprehensiveTotal: number
+  comprehensiveMajorRank: Rank
+  comprehensivePercent: number
   eligible: boolean
   rejectionReasons: string[]
   exclusionConflicts: string[]
-  details: {
-    academicScore: number
-    moralScore: number
-    practiceScore: number
-    sportsScore: number
-    extraScore: number
-  }
 }
